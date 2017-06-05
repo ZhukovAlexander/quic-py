@@ -6,7 +6,7 @@ class QUICConection:
     # Constants used in loss recovery
     # https://tools.ietf.org/html/draft-ietf-quic-recovery-03#section-3.2.1
     # ======================================================================
-    kMaxTLPs = 2
+    kMaxTLPs: int = 2
 
     kReorderingThreshold = 3
 
@@ -26,7 +26,7 @@ class QUICConection:
     # ======================================================================
     loss_detection_alarm = None
 
-    handshake_count = None
+    handshake_count: int = None
 
     tlp_count = None
 
