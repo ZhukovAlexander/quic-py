@@ -8,3 +8,4 @@ QUIC protocol implementation in python
 3. [Hypertext Transfer Protocol (HTTP) over QUIC - IETF draft](https://tools.ietf.org/html/draft-ietf-quic-http-03)
 4. [Specification of DNS over Dedicated QUIC Connections - IETF draft](https://tools.ietf.org/html/draft-huitema-quic-dnsoquic-01)
 5. [Hypertext Transfer Protocol (HTTP) over multicast QUIC - IETF draft](https://tools.ietf.org/html/draft-pardue-quic-http-mcast-00)
+6. [QUIC @ IETF Datatracker](https://datatracker.ietf.org/wg/quic/about/)
