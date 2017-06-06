@@ -5,6 +5,11 @@ import sys
 class Frame:
     """"""
 
+    def __init__(self, locals_):
+        locals_.pop('self')
+        for name, val in locals_.items():
+            setattr(self, name, val)
+
     def __eq__(self, other):
         return self.__dict__ == other.__dict__
 
@@ -28,7 +33,8 @@ class Frame:
             0x4: WindowUpdateFrame,
             0x5: BlockedFrame,
             0x6: StopWaitingFrame,
-            0x7: PingFrame
+            0x7: PingFrame,
+            0x9: StreamBlockedFrame
         }
 
         try:
@@ -99,6 +105,30 @@ class WindowUpdateFrame(Frame):
 class BlockedFrame(Frame):
     """"""
 
+    def __init__(self, stream_id):
+        self.stream_id = stream_id
+
+    @classmethod
+    def from_bytes(cls, bytedata):
+        return cls(int.from_bytes(bytedata[1:4], sys.byteorder))
+
+    def to_bytes(self):
+        return b'\x05' + self.stream_id.to_bytes(4, sys.byteorder)
+
+class StreamBlockedFrame(Frame):
+    """"""
+
+
+    def __init__(self, stream_id):
+        super().__init__(locals())
+
+    @classmethod
+    def from_bytes(cls, bytedata):
+        return cls(int.from_bytes(bytedata[1:4], sys.byteorder))
+
+    def to_bytes(self):
+        return b'\x09' + self.stream_id.to_bytes(4, sys.byteorder)
+
 
 class StopWaitingFrame(Frame):
     """"""
@@ -106,6 +136,14 @@ class StopWaitingFrame(Frame):
 
 class PingFrame(Frame):
     """"""
+
+    @classmethod
+    def from_bytes(cls, bytedata):
+        return cls()
+
+    def to_bytes(self):
+        return b'\x07'
+
 
 
 class StreamFrame(Frame):
@@ -178,6 +216,13 @@ class AckFrame(Frame):
 class CongestionFeedbackFrame(Frame):
     """"""
 
+    @classmethod
+    def from_bytes(cls, bytedata):
+        return cls()
+
+    def to_bytes(self):
+        return 0b001000.to_bytes(1, sys.byteorder)
+
 
 class QUICPacket:
     """"""
@@ -192,3 +237,9 @@ if __name__ == '__main__':
 
     window_update = WindowUpdateFrame(1, 1)
     assert Frame.from_bytes(window_update.to_bytes()) == window_update
+
+    blocked = BlockedFrame(1)
+    assert Frame.from_bytes(blocked.to_bytes()) == blocked
+
+    stream_blocked = StreamBlockedFrame(1)
+    assert Frame.from_bytes(stream_blocked.to_bytes()) == stream_blocked
