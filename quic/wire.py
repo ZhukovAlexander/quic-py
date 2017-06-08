@@ -11,6 +11,7 @@ class Frame:
             setattr(self, name, val)
 
     def __eq__(self, other):
+        # print(self.__dict__, other.__dict__)
         return self.__dict__ == other.__dict__
 
     @classmethod
@@ -18,12 +19,10 @@ class Frame:
 
         type_byte = bytedata[0]
 
-        if type_byte >= 128:
+        if type_byte >= 192:
             return StreamFrame.from_bytes(bytedata)
-        if type_byte >= 64:
+        if type_byte >= 160:
             return AckFrame.from_bytes(bytedata)
-        if type_byte >= 32:
-            return CongestionFeedbackFrame.from_bytes(bytedata)
 
         switch = {
             PaddingFrame.TYPE_BYTE[0]: PaddingFrame,
@@ -86,14 +85,41 @@ class ResetStreamFrame(Frame):
                 self.error.to_bytes(4, sys.byteorder))
 
 
-class ConnectionCloseFrame(Frame):
+class ConnectionCloseFrame(RegularFrame):
     """"""
     TYPE_BYTE = b'\x02'
 
+    def __init__(self, error, reason):
+        super().__init__(locals())
 
-class GoAwayFrame(Frame):
+    @classmethod
+    def from_bytes(cls, bytedata):
+        return cls(int.from_bytes(bytedata[1:4], sys.byteorder),
+                   bytedata[7:7 + int.from_bytes(bytedata[5:7], sys.byteorder)])
+
+    def to_bytes(self):
+        return (self.TYPE_BYTE +
+                self.error.to_bytes(4, sys.byteorder) +
+                len(self.reason).to_bytes(2, sys.byteorder) +
+                self.reason)
+
+
+class GoAwayFrame(RegularFrame):
     """"""
     TYPE_BYTE = b'\x03'
+
+    def __init__(self, largest_client_stream_id, largest_server_stream_id):
+        super().__init__(locals())
+
+    @classmethod
+    def from_bytes(cls, bytedata):
+        return cls(int.from_bytes(bytedata[1:4], sys.byteorder),
+                   int.from_bytes(bytedata[5:8], sys.byteorder))
+
+    def to_bytes(self):
+        return (self.TYPE_BYTE +
+                self.largest_client_stream_id.to_bytes(4, sys.byteorder) +
+                self.largest_server_stream_id.to_bytes(4, sys.byteorder))
 
 
 class MaxDataFrame(Frame):
@@ -222,8 +248,8 @@ class StreamFrame(Frame):
     @classmethod
     def from_bytes(cls, bytedata):
         type_byte = bytedata[0]
-        fin = type_byte & 0x40 > 0
-        data_len_present = type_byte & 0x20 > 0
+        fin = type_byte & 0b00100000 > 0
+        data_len_present = type_byte & 0b00010000 > 0
         offset_len = type_byte & 0x1C >> 2
         pos = 1
 
@@ -251,13 +277,13 @@ class StreamFrame(Frame):
 
     def to_bytes(self):
 
-        type_byte = 0x80
+        type_byte = 0xc0
 
         if self.fin:
-            type_byte ^= 0x40
+            type_byte ^= 0b00100000
 
         else:
-            type_byte ^= 0x20
+            type_byte ^= 0b00010000
 
         offset_length = self._get_offset_length()
 
@@ -303,3 +329,9 @@ if __name__ == '__main__':
 
     max_stream_id = MaxStreamIDFrame(1)
     assert Frame.from_bytes(max_stream_id.to_bytes()) == max_stream_id
+
+    conn_close = ConnectionCloseFrame(1, b'game over')
+    assert Frame.from_bytes(conn_close.to_bytes()) == conn_close
+
+    goaway = GoAwayFrame(1, 1)
+    assert Frame.from_bytes(goaway.to_bytes()) == goaway
