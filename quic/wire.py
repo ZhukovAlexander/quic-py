@@ -1,6 +1,6 @@
 
 import sys
-
+from utils import write_ufloat16, read_ufloat16
 
 class Frame:
     """"""
@@ -11,11 +11,11 @@ class Frame:
             setattr(self, name, val)
 
     def __eq__(self, other):
-        # print(self.__dict__, other.__dict__)
+        print(self.__dict__, other.__dict__)
         return self.__dict__ == other.__dict__
 
     @classmethod
-    def from_bytes(self, bytedata):
+    def from_bytes(cls, bytedata):
 
         type_byte = bytedata[0]
 
@@ -63,14 +63,12 @@ class PaddingFrame(RegularFrame):
     TYPE_BYTE = b'\x00'
 
 
-class ResetStreamFrame(Frame):
+class ResetStreamFrame(RegularFrame):
     """"""
     TYPE_BYTE = b'\x01'
 
     def __init__(self, stream_id, offset, error):
-        self.stream_id = stream_id
-        self.offset = offset
-        self.error = error
+        super().__init__(locals())
 
     @classmethod
     def from_bytes(cls, bytedata):
@@ -300,12 +298,100 @@ class StreamFrame(Frame):
         return type_byte.to_bytes(1, sys.byteorder) + stream_id + offset + data_len + self.payload
 
 
+
 class AckFrame(Frame):
     """"""
+    
+
+    def __init__(self, largest_acknowledged, ack_delay, ack_blocks, timestapms):
+        super().__init__(locals())
+
+    @classmethod
+    def from_bytes(cls, bytedata):
+        type_byte = bytedata[0]
+        n = type_byte & 0x10
+        ll = type_byte & 0x0c
+        mm = type_byte & 0x03
+        pos = 1
+        if type_byte & 0x10:
+            num_blocks = bytedata[1]
+            pos = 2
+        else:
+            num_blocks = 1
+
+        num_ts = bytedata[pos]
+        pos += 1
+        largest_acknowledged_len = (1, 2, 4, 6)[ll >> 2]
+        largest_acknowledged = int.from_bytes(bytedata[pos:pos + largest_acknowledged_len], sys.byteorder)
+        pos += largest_acknowledged_len
+        ack_delay = int.from_bytes(bytedata[pos:pos + 2], sys.byteorder)
+        pos += 2
+        ack_blocks = []
+        ack_blocks.append(int.from_bytes(bytedata[pos:pos + largest_acknowledged_len], sys.byteorder))
+        pos += largest_acknowledged_len
+        for i in range(1, num_blocks):
+            ack_blocks.append(
+                (int.from_bytes(bytedata[pos:pos + 1], sys.byteorder),
+                 int.from_bytes(bytedata[pos + 1:pos + 1 + largest_acknowledged_len], sys.byteorder)),
+            )
+            pos += 1 + largest_acknowledged_len
+
+        timestapms = []
+        if num_ts:
+            timestapms.append(
+                (bytedata[pos], int.from_bytes(bytedata[pos + 1: pos + 4], sys.byteorder))
+            )
+            pos += 1 + 4
+        for i in range(1, num_ts):
+            timestapms.append(
+                (bytedata[pos], read_ufloat16(bytedata[pos + 1:pos + 3]))
+            )
+            pos += 3
+
+        return cls(largest_acknowledged, ack_delay, ack_blocks, timestapms)
+
+    def to_bytes(self):
+        type_byte = 0b10100000
+        type_byte ^= 0b00010000
+        type_byte ^= 0b00001100  # for simplicity, just use 6 bytes to encode largest_acknowledged
+        type_byte ^= 0b00000011  # for simplicity, just use 6 bytes to encode ack_block
+
+        ack_block_section = b''
+        ack_block_section += self.ack_blocks[0].to_bytes(6, sys.byteorder)
+
+        for gap, ack_block_len in self.ack_blocks[1:]:
+            ack_block_section += gap.to_bytes(1, sys.byteorder) + ack_block_len.to_bytes(6, sys.byteorder)
+
+        timestapm_section = b''
+        if self.timestapms:
+            delta_la, first_time_stamp = self.timestapms[0]
+            timestapm_section += delta_la.to_bytes(1, sys.byteorder)
+            timestapm_section += first_time_stamp.to_bytes(4, sys.byteorder)
+
+        for delta_la_n, time_since_prev_n in self.timestapms[1:]:
+            timestapm_section += delta_la_n.to_bytes(1, sys.byteorder)
+            timestapm_section += write_ufloat16(time_since_prev_n)
+
+        return (type_byte.to_bytes(1, sys.byteorder) +
+                len(self.ack_blocks).to_bytes(1, sys.byteorder) +
+                len(self.timestapms).to_bytes(1, sys.byteorder) +
+                self.largest_acknowledged.to_bytes(6, sys.byteorder) +
+                self.ack_delay.to_bytes(2, sys.byteorder) +
+                ack_block_section +
+                timestapm_section)
+
+
+
+
+
+
+
+
 
 
 class QUICPacket:
     """"""
+    pass
 
 
 if __name__ == '__main__':
@@ -335,3 +421,6 @@ if __name__ == '__main__':
 
     goaway = GoAwayFrame(1, 1)
     assert Frame.from_bytes(goaway.to_bytes()) == goaway
+
+    ack = AckFrame(1, 2, [3, (4, 5)], [(1, 2), (3, 4), (5, 6)])
+    assert Frame.from_bytes(ack.to_bytes()) == ack
