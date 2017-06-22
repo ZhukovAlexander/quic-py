@@ -23,8 +23,8 @@ FLOAT_16_MANTISSA_EFFECTIVE_VALUE = 1 << FLOAT_16_MANTISSA_EFFECTIVE_BITS
 FLOAT_16_MAX_VALUE = 0x3FFC0000000
 
 
-def read_ufloat16(bytedata):
-    value = int.from_bytes(bytedata, 'big')
+def read_ufloat16(buffer):
+    value = read_int(2, buffer)
     if value < FLOAT_16_MANTISSA_EFFECTIVE_VALUE:
         return value
 
@@ -51,3 +51,11 @@ def write_ufloat16(value):
 
         res = int(value) + (exponent << FLOAT_16_MANTISSA_BITS)
     return res.to_bytes(2, 'big')
+
+
+def read_int(size, buffer):
+    return int.from_bytes(buffer.read1(size), 'big')
+
+
+def write_int(size, i):
+    return i.to_bytes(size, 'big')

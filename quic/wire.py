@@ -1,6 +1,7 @@
 
 import sys
-from utils import write_ufloat16, read_ufloat16
+
+from utils import write_ufloat16, read_ufloat16, read_int, write_int
 
 class Frame:
     """"""
@@ -72,15 +73,15 @@ class ResetStreamFrame(RegularFrame):
 
     @classmethod
     def from_bytes(cls, buffer):
-        return cls(int.from_bytes(buffer.read1(4), sys.byteorder),
-                   int.from_bytes(buffer.read1(8), sys.byteorder),
-                   int.from_bytes(buffer.read1(4), sys.byteorder))
+        return cls(read_int(4, buffer),
+                   read_int(8, buffer),
+                   read_int(4, buffer))
 
     def to_bytes(self):
         return (self.TYPE_BYTE +
-                self.stream_id.to_bytes(4, sys.byteorder) +
-                self.offset.to_bytes(8, sys.byteorder) +
-                self.error.to_bytes(4, sys.byteorder))
+                write_int(4, self.stream_id) +
+                write_int(8, self.offset) +
+                write_int(4, self.error))
 
 
 class ConnectionCloseFrame(RegularFrame):
@@ -92,14 +93,12 @@ class ConnectionCloseFrame(RegularFrame):
 
     @classmethod
     def from_bytes(cls, buffer):
-        return cls(int.from_bytes(buffer.read1(4), sys.byteorder),
-                   buffer.read1(
-                    int.from_bytes(buffer.read1(2), sys.byteorder)))
+        return cls(read_int(4, buffer), buffer.read1(read_int(2, buffer)))
 
     def to_bytes(self):
         return (self.TYPE_BYTE +
-                self.error.to_bytes(4, sys.byteorder) +
-                len(self.reason).to_bytes(2, sys.byteorder) +
+                write_int(4, self.error) +
+                write_int(2, len(self.reason)) +
                 self.reason)
 
 
@@ -112,13 +111,13 @@ class GoAwayFrame(RegularFrame):
 
     @classmethod
     def from_bytes(cls, buffer):
-        return cls(int.from_bytes(buffer.read1(4), sys.byteorder),
-                   int.from_bytes(buffer.read1(4), sys.byteorder))
+        return cls(read_int(4, buffer),
+                   read_int(4, buffer))
 
     def to_bytes(self):
         return (self.TYPE_BYTE +
-                self.largest_client_stream_id.to_bytes(4, sys.byteorder) +
-                self.largest_server_stream_id.to_bytes(4, sys.byteorder))
+                write_int(4, self.largest_client_stream_id) +
+                write_int(4, self.largest_server_stream_id))
 
 
 class MaxDataFrame(Frame):
@@ -130,10 +129,10 @@ class MaxDataFrame(Frame):
 
     @classmethod
     def from_bytes(cls, buffer):
-        return cls(int.from_bytes(buffer.read1(4), sys.byteorder))
+        return cls(read_int(4, buffer))
 
     def to_bytes(self):
-        return self.TYPE_BYTE + self.max_data.to_bytes(4, sys.byteorder)
+        return self.TYPE_BYTE + write_int(4, self.max_data)
 
 
 class MaxStreamDataFrame(Frame):
@@ -146,13 +145,13 @@ class MaxStreamDataFrame(Frame):
 
     @classmethod
     def from_bytes(cls, buffer):
-        return cls(int.from_bytes(buffer.read1(4), sys.byteorder),
-                   int.from_bytes(buffer.read1(8), sys.byteorder))
+        return cls(read_int(4, buffer),
+                   read_int(8, buffer))
 
     def to_bytes(self):
         return (self.TYPE_BYTE +
-                self.stream_id.to_bytes(4, sys.byteorder) +
-                self.offset.to_bytes(8, sys.byteorder))
+                write_int(4, self.stream_id) +
+                write_int(4, self.offset))
 
 
 class MaxStreamIDFrame(Frame):
@@ -164,10 +163,10 @@ class MaxStreamIDFrame(Frame):
 
     @classmethod
     def from_bytes(cls, buffer):
-        return cls(int.from_bytes(buffer.read1(4), sys.byteorder))
+        return cls(read_int(4, buffer))
 
     def to_bytes(self):
-        return self.TYPE_BYTE + self.max_stream_id.to_bytes(4, sys.byteorder)
+        return self.TYPE_BYTE + write_int(4, self.max_stream_id)
 
 
 class PingFrame(RegularFrame):
@@ -184,10 +183,10 @@ class BlockedFrame(Frame):
 
     @classmethod
     def from_bytes(cls, buffer):
-        return cls(int.from_bytes(buffer.read1(4), sys.byteorder))
+        return cls(read_int(4, buffer))
 
     def to_bytes(self):
-        return self.TYPE_BYTE + self.stream_id.to_bytes(4, sys.byteorder)
+        return self.TYPE_BYTE + write_int(4, self.stream_id)
 
 
 class StreamBlockedFrame(Frame):
@@ -199,10 +198,10 @@ class StreamBlockedFrame(Frame):
 
     @classmethod
     def from_bytes(cls, buffer):
-        return cls(int.from_bytes(buffer.read1(4), sys.byteorder))
+        return cls(read_int(4, buffer))
 
     def to_bytes(self):
-        return self.TYPE_BYTE + self.stream_id.to_bytes(4, sys.byteorder)
+        return self.TYPE_BYTE + write_int(4, self.stream_id)
 
 
 class StreamIDNeededFrame(RegularFrame):
@@ -219,13 +218,13 @@ class NewConnectionIDFrame(Frame):
 
     @classmethod
     def from_bytes(cls, buffer):
-        return cls(int.from_bytes(buffer.read1(2), sys.byteorder),
-                   int.from_bytes(buffer.read1(8), sys.byteorder))
+        return cls(read_int(2, buffer),
+                   read_int(8, buffer))
 
     def to_bytes(self):
         return (self.TYPE_BYTE +
-                self.sequence.to_bytes(2, sys.byteorder) +
-                self.connection_id.to_bytes(8, sys.byteorder))
+                write_int(2, self.sequence) +
+                write_int(2, self.connection_id))
 
 
 class StreamFrame(Frame):
@@ -238,21 +237,24 @@ class StreamFrame(Frame):
 
     @classmethod
     def from_bytes(cls, buffer):
+
+        # we need to re-read the type byte
         buffer.seek(-1, 1)
         type_byte = buffer.read1(1)[0]
+
         fin = type_byte & 0x20  > 0
         data_len_present = type_byte & 0x10 > 0
         offset_len = type_byte & 0x0C >> 2
 
         stream_id_len = (type_byte & 0x03)
 
-        stream_id = int.from_bytes(buffer.read1(stream_id_len), sys.byteorder)
-        offset = int.from_bytes(buffer.read1(offset_len), sys.byteorder)
+        stream_id = read_int(stream_id_len, buffer)
+        offset = read_int(offset_len, buffer)
 
         if not data_len_present:
             data_length = len(bytedata)
         else:
-            data_length = int.from_bytes(buffer.read1(2), sys.byteorder)
+            data_length = read_int(2, buffer)
 
         return cls(stream_id, offset, fin, buffer.read1(data_length))
 
@@ -280,54 +282,52 @@ class StreamFrame(Frame):
         stream_id_len = self._get_sream_id_length()
         type_byte ^= stream_id_len
 
-        stream_id = self.stream_id.to_bytes(stream_id_len, sys.byteorder)
-        offset = self.offset.to_bytes(offset_length, sys.byteorder)
-        data_len = len(self.payload).to_bytes(2, sys.byteorder)
+        stream_id = write_int(stream_id_len, self.stream_id)
+        offset = write_int(offset_length, self.offset)
+        data_len = write_int(2, len(self.payload))
 
-        return type_byte.to_bytes(1, sys.byteorder) + stream_id + offset + data_len + self.payload
+        return write_int(1, type_byte) + stream_id + offset + data_len + self.payload
 
 
 class AckFrame(Frame):
     """"""
-    
+
     def __init__(self, largest_acknowledged, ack_delay, ack_blocks, timestapms):
         super().__init__(locals())
 
     @classmethod
     def from_bytes(cls, buffer):
+
+        # we need to re-read the type byte
         buffer.seek(-1, 1)
         type_byte = buffer.read1(1)[0]
         ll = type_byte & 0x0c
-        mm = type_byte & 0x03
-        pos = 1
         if type_byte & 0x10:
             num_blocks = buffer.read1(1)[0]
-            pos = 2
         else:
             num_blocks = 1
 
         num_ts = buffer.read1(1)[0]
         largest_acknowledged_len = (1, 2, 4, 6)[ll >> 2]
-        largest_acknowledged = int.from_bytes(buffer.read1(largest_acknowledged_len), sys.byteorder)
-        ack_delay = int.from_bytes(buffer.read1(2), sys.byteorder)
+        largest_acknowledged = read_int(largest_acknowledged_len, buffer)
+        ack_delay = read_int(2, buffer)
         ack_blocks = []
-        ack_blocks.append(int.from_bytes(buffer.read1(largest_acknowledged_len), sys.byteorder))
+        ack_blocks.append(read_int(largest_acknowledged_len, buffer))
         for i in range(1, num_blocks):
             ack_blocks.append(
-                (int.from_bytes(buffer.read1(1), sys.byteorder),
-                 int.from_bytes(buffer.read1(largest_acknowledged_len), sys.byteorder)),
+                (read_int(1, buffer),
+                 read_int(largest_acknowledged_len, buffer))
             )
 
         timestapms = []
         if num_ts:
             timestapms.append(
-                (buffer.read1(1)[0], int.from_bytes(buffer.read1(4), sys.byteorder))
+                (buffer.read1(1)[0], read_int(4, buffer))
             )
         for i in range(1, num_ts):
             timestapms.append(
-                (buffer.read1(1)[0], read_ufloat16(buffer.read1(2)))
+                (buffer.read1(1)[0], read_ufloat16(buffer))
             )
-            pos += 3
 
         return cls(largest_acknowledged, ack_delay, ack_blocks, timestapms)
 
@@ -338,34 +338,28 @@ class AckFrame(Frame):
         type_byte ^= 0b00000011  # for simplicity, just use 6 bytes to encode ack_block
 
         ack_block_section = b''
-        ack_block_section += self.ack_blocks[0].to_bytes(6, sys.byteorder)
+        ack_block_section += write_int(6, self.ack_blocks[0])
 
         for gap, ack_block_len in self.ack_blocks[1:]:
-            ack_block_section += gap.to_bytes(1, sys.byteorder) + ack_block_len.to_bytes(6, sys.byteorder)
+            ack_block_section += write_int(1, gap) + write_int(6, ack_block_len)
 
         timestapm_section = b''
         if self.timestapms:
             delta_la, first_time_stamp = self.timestapms[0]
-            timestapm_section += delta_la.to_bytes(1, sys.byteorder)
-            timestapm_section += first_time_stamp.to_bytes(4, sys.byteorder)
+            timestapm_section += write_int(1, delta_la)
+            timestapm_section += write_int(4, first_time_stamp)
 
         for delta_la_n, time_since_prev_n in self.timestapms[1:]:
-            timestapm_section += delta_la_n.to_bytes(1, sys.byteorder)
+            timestapm_section += write_int(1, delta_la_n)
             timestapm_section += write_ufloat16(time_since_prev_n)
 
-        return (type_byte.to_bytes(1, sys.byteorder) +
-                len(self.ack_blocks).to_bytes(1, sys.byteorder) +
-                len(self.timestapms).to_bytes(1, sys.byteorder) +
-                self.largest_acknowledged.to_bytes(6, sys.byteorder) +
-                self.ack_delay.to_bytes(2, sys.byteorder) +
+        return (write_int(1, type_byte) +
+                write_int(1, len(self.ack_blocks)) +
+                write_int(1, len(self.timestapms)) +
+                write_int(6, self.largest_acknowledged) +
+                write_int(2, self.ack_delay) +
                 ack_block_section +
                 timestapm_section)
-
-
-
-
-
-
 
 
 
