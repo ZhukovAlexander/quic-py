@@ -1,5 +1,5 @@
 # quic-py
-QUIC protocol implementation in python
+QUIC protocol implementation in python, inspired by [quic-go](https://github.com/lucas-clemente/quic-go)
 
 ## References
 
