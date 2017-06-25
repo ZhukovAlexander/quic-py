@@ -366,7 +366,19 @@ class AckFrame(Frame):
 
 class QUICPacket:
     """"""
-    pass
+
+    @classmethod
+    def from_bytes(cls, buffer):
+        return cls()
+
+    def to_bytes(self):
+        return
+
+class LongHeaderPacket(QUICPacket):
+    """"""
+
+class ShortHeaderPacket(QUICPacket):
+    """"""
 
 
 if __name__ == '__main__':
